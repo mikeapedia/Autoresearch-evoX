@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:arxiv.org)",
+      "Bash(where python:*)",
+      "Bash(uv run python -c \":*)",
+      "Bash(uv run:*)",
+      "Bash(ruff check:*)",
+      "Bash(ty check:*)",
+      "Bash(find /d/Autoresearch-EvoX -type f \\\\\\(-name *.json -o -name *.toml -o -name *.cfg -o -name .env* \\\\\\))",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
