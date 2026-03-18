@@ -1,0 +1,51 @@
+---
+description: Show a full EvoX dashboard — phase, progress, strategy, population
+---
+
+Display a comprehensive EvoX status dashboard by gathering data from all state sources. Run each command and compile the results into a clean summary.
+
+## Data to gather
+
+1. **Session state** — run:
+```bash
+uv run evox/state_manager.py get phase
+uv run evox/state_manager.py get window_count
+uv run evox/state_manager.py get strategy_id
+uv run evox/state_manager.py get consecutive_stagnations
+uv run evox/state_manager.py get window_start_best_bpb
+uv run evox/state_manager.py get master_val_bpb
+```
+
+2. **Population summary** — run:
+```bash
+uv run evox/population_summary.py
+```
+
+3. **Strategy validation** — run:
+```bash
+uv run evox/strategy_validator.py evox/current_strategy.md
+```
+
+4. **Candidate count and recent activity** — run:
+```bash
+uv run python -c "import json; p=json.load(open('evox/population.json')); print(f'Total candidates: {len(p)}'); local=[c for c in p if c.get(\"source\")==\"local\"]; print(f'Local: {len(local)}, Swarm: {len(p)-len(local)}')"
+```
+
+## Output format
+
+Present the results as a formatted dashboard:
+
+```
+╔══════════════════════════════════════════╗
+║           EvoX STATUS DASHBOARD          ║
+╠══════════════════════════════════════════╣
+║ Phase:        [current phase]            ║
+║ Window:       [N] / Strategy: S_[XXX]    ║
+║ Stagnations:  [N] consecutive            ║
+║ Best val_bpb: [X.XXXX] (master: Y.YYYY)  ║
+║ Population:   [N] total ([L] local)      ║
+║ Strategy:     [VALID/INVALID]            ║
+╚══════════════════════════════════════════╝
+```
+
+Then show the key sections from population_summary output (score stats, operator performance, convergence).

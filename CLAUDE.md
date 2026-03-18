@@ -50,6 +50,23 @@ No test suite — the scripts are validated by running subcommands with mock dat
     └── cand_NNNN/         # Each candidate's train.py + run.log
 ```
 
+## Hooks and Commands
+
+**`evox/hooks/`** — Five Python hook scripts that act as guardrails during autonomous operation:
+
+- **`guard_json_edits.py`** (PreToolUse: Write|Edit) — Blocks direct edits to `state.json`, `population.json`, `strategies.json`. Forces all mutations through `state_manager.py` subcommands.
+- **`validate_strategy.py`** (PostToolUse: Write|Edit) — Runs `strategy_validator.py` automatically after any edit to `current_strategy.md`. Catches malformed strategies before they enter the loop.
+- **`guard_destructive.py`** (PreToolUse: Bash) — Blocks `git reset --hard`, `rm -r candidates/`, and other destructive operations that could wipe evaluated candidates or state.
+- **`validate_before_train.py`** (PreToolUse: Bash) — Checks that `train.py` differs from the parent's version before launching a GPU training run. Prevents wasting compute on identical re-evaluations.
+- **`auto_checkpoint.py`** (Stop) — Git-commits all EvoX state files when a session ends (context limit, crash, timeout) so `resume.py` can recover cleanly.
+
+**`.claude/commands/`** — Two slash commands for manual use:
+
+- **`/checkpoint`** — Snapshots all EvoX state to a timestamped git commit with candidate/window counts in the message.
+- **`/evox-status`** — Displays a dashboard with current phase, window, strategy, stagnation count, best score, population size, operator performance, and convergence analysis.
+
+All hooks are wired in `.claude/settings.local.json` under the `hooks` key. They receive tool input as JSON on stdin and use exit codes (0=allow, 2=block with stderr message).
+
 ## Editing Guidelines
 
 - Scripts must work with `uv run evox/<script>.py` on the remote VM (Python 3.x, stdlib only).
