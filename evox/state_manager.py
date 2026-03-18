@@ -39,8 +39,12 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from filelock import locked_json
-from gpu import get_gpu_index, gpu_prefix
+# Add evox/ directory to sys.path so sibling modules (filelock, gpu) are importable
+# when run via `uv run evox/state_manager.py` from the project root.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from filelock import locked_json  # noqa: E402
+from gpu import get_gpu_index, gpu_prefix  # noqa: E402
 
 EVOX_DIR = Path(__file__).parent
 POPULATION_FILE = EVOX_DIR / "population.json"       # SHARED across GPUs
@@ -319,10 +323,16 @@ def cmd_check_stagnation(args):
     tau = state.get("tau", 0.001)
     W = state.get("window_size", 6)
 
-    # Compute local-only delta (excludes swarm imports from progress measurement)
-    local_cands = [c for c in pop if c["source"] == "local"]
-    if local_cands:
-        local_best_bpb = min(c["val_bpb"] for c in local_cands)
+    # Compute this-GPU-only delta for stagnation detection.
+    # In multi-GPU mode, each GPU must judge its own strategy on its own output.
+    # Filter by gpu_index if available, otherwise fall back to all local candidates.
+    gpu_idx = get_gpu_index()
+    gpu_cands = [c for c in pop if c["source"] == "local" and c.get("gpu_index") == gpu_idx]
+    if not gpu_cands:
+        # Fallback for pre-migration candidates without gpu_index field
+        gpu_cands = [c for c in pop if c["source"] == "local"]
+    if gpu_cands:
+        local_best_bpb = min(c["val_bpb"] for c in gpu_cands)
         local_delta = start_bpb - local_best_bpb
     else:
         local_best_bpb = start_bpb
@@ -608,7 +618,13 @@ def cmd_show(args):
 # ── migrate ──────────────────────────────────────────────────────────────────
 
 def cmd_migrate(args):
-    """Migrate single-GPU state files to multi-GPU naming scheme."""
+    """Migrate single-GPU state files to multi-GPU naming scheme.
+
+    WARNING: Run this with all other GPU instances stopped. This command
+    modifies shared files (population.json, strategies.json) without
+    file locking to avoid partial migration under lock contention.
+    """
+    print("WARNING: Ensure all other GPU instances are stopped before migrating.")
     gp = gpu_prefix()
     migrated = []
 
@@ -647,6 +663,13 @@ def cmd_migrate(args):
         if parent.startswith("cand_") and not parent.startswith("cand_g"):
             num = parent.removeprefix("cand_")
             c["parent_id"] = f"cand_{gp}_{num}"
+
+    # Update strategy_id field inside each candidate record
+    for c in pop:
+        sid = c.get("strategy_id", "")
+        if sid.startswith("S_") and not sid.startswith("S_g"):
+            num = sid.removeprefix("S_")
+            c["strategy_id"] = f"S_{gp}_{num}"
 
     if renamed_dirs:
         migrated.append(f"  {renamed_dirs} candidate directories renamed with {gp} prefix")

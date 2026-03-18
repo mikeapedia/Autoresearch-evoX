@@ -37,7 +37,8 @@ No test suite — the scripts are validated by running subcommands with mock dat
 - **Candidate IDs are GPU-namespaced.** `cand_g0_0003` prevents ID collisions between concurrent GPUs.
 - **`consecutive_stagnations` counter survives strategy changes.** It is intentionally NOT reset in `record-strategy`. Only `check-stagnation` (on success) and `get-best-strategy` (on revert) reset it. This enables the 2+ stagnation revert mechanism.
 - **Swarm candidates have no local train.py.** `import-swarm` records metadata only. `get-parent` filters to local candidates; `get-inspiration` prints API fetch commands for swarm entries.
-- **Stagnation uses local-only delta.** `check-stagnation` compares local candidates against `window_start_best_bpb` to prevent swarm imports from masking strategy ineffectiveness. Overall delta is still used for J scoring.
+- **Stagnation uses this-GPU-only delta.** In multi-GPU mode, `check-stagnation` filters candidates by `gpu_index` so each GPU evaluates its own strategy honestly. Falls back to all local candidates for pre-migration data without `gpu_index` fields.
+- **Cross-GPU strategy learning.** `get-best-strategy` searches ALL GPUs' strategies in `strategies.json` and can restore a strategy created by a different GPU. This means GPU-0 might adopt GPU-1's best strategy, creating cross-GPU knowledge transfer. The `current_strategy_id` in state may then reference another GPU's strategy ID (e.g., `S_g1_003`), which is expected and valid.
 - **Scoring formula adapted from maximize to minimize:** `J = Δ · log(1 + 1/start_val_bpb) / √W` where `Δ = start_bpb - end_bpb` (positive = improvement).
 
 ## File Relationships (on the remote VM)

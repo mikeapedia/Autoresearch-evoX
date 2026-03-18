@@ -20,7 +20,7 @@ The codebase has two files that matter:
 This loop implements the EvoX meta-evolutionary framework adapted for autolab:
 
 * **Solution database D** (`evox/population.json`): Every candidate you evaluate is recorded — score, operator used, hypothesis, parent. This is your population memory.
-* **Search strategy S** (`evox/current_strategy.md`): A document you follow that specifies how to select parents, choose variation operators, and construct inspiration sets. This shapes your search behavior.
+* **Search strategy S** (`evox/current_strategy_gpu${EVOX_GPU}.md`): A document you follow that specifies how to select parents, choose variation operators, and construct inspiration sets. This shapes your search behavior.
 * **Strategy history H** (`evox/strategies.json`): Past strategies and their performance scores. You consult this when evolving a new strategy.
 * **Variation operators**: REFINE (small targeted edits), DIVERGE (structural changes), FREE (unconstrained). The strategy controls the mix.
 * **Windows**: You evaluate W=6 candidates per window (~30 min). After each window, you check progress and potentially evolve the strategy.
@@ -271,7 +271,7 @@ Update the timestamp: `uv run evox/state_manager.py set --key last_timestamp --v
 
 #### Step 1.2: Select parent
 
-Read `evox/current_strategy.md` and follow its **Parent Selection Rule**.
+Read `evox/current_strategy_gpu${EVOX_GPU}.md` and follow its **Parent Selection Rule**.
 
 Use the state manager to get the parent candidate:
 
@@ -462,7 +462,7 @@ cat evox/strategies.json
 Read the current strategy:
 
 ```bash
-cat evox/current_strategy.md
+cat evox/current_strategy_gpu${EVOX_GPU}.md
 ```
 
 #### Step 3.2: Analyze why the strategy stagnated

@@ -51,7 +51,7 @@ def main() -> None:
 
     if result.returncode != 0:
         print(
-            "STRATEGY VALIDATION FAILED after edit to current_strategy.md:\n"
+            f"STRATEGY VALIDATION FAILED after edit to {os.path.basename(file_path)}:\n"
             f"{result.stdout}\n{result.stderr}\n"
             "Fix the strategy document before continuing the EvoX loop.",
             file=sys.stderr,
