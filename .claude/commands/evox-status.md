@@ -8,12 +8,13 @@ Display a comprehensive EvoX status dashboard by gathering data from all state s
 
 1. **Session state** — run:
 ```bash
-uv run evox/state_manager.py get phase
-uv run evox/state_manager.py get window_count
-uv run evox/state_manager.py get strategy_id
-uv run evox/state_manager.py get consecutive_stagnations
-uv run evox/state_manager.py get window_start_best_bpb
-uv run evox/state_manager.py get master_val_bpb
+uv run evox/state_manager.py get --key phase
+uv run evox/state_manager.py get --key window_count
+uv run evox/state_manager.py get --key window_iteration
+uv run evox/state_manager.py get --key current_strategy_id
+uv run evox/state_manager.py get --key consecutive_stagnations
+uv run evox/state_manager.py get --key window_start_best_bpb
+uv run evox/state_manager.py get --key master_val_bpb
 ```
 
 2. **Population summary** — run:
@@ -40,7 +41,7 @@ Present the results as a formatted dashboard:
 ║           EvoX STATUS DASHBOARD          ║
 ╠══════════════════════════════════════════╣
 ║ Phase:        [current phase]            ║
-║ Window:       [N] / Strategy: S_[XXX]    ║
+║ Window:       #[N] / Strategy: S_[XXX]   ║
 ║ Stagnations:  [N] consecutive            ║
 ║ Best val_bpb: [X.XXXX] (master: Y.YYYY)  ║
 ║ Population:   [N] total ([L] local)      ║

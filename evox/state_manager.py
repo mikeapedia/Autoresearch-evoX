@@ -18,6 +18,7 @@ Usage:
     python evox/state_manager.py record-strategy --id S_001 --parent-id S_000 --description "..."
     python evox/state_manager.py score-strategy
     python evox/state_manager.py get-best-strategy
+    python evox/state_manager.py get --key <key>
     python evox/state_manager.py set --key <key> --value <value>
     python evox/state_manager.py show
 """
@@ -94,9 +95,11 @@ def cmd_init(args):
         "master_val_bpb": None,
         "last_timestamp": datetime.now(timezone.utc).isoformat(),
         "total_evaluations": 0,
+        "window_count": 0,
         "tau": args.tau,
         "gpu_index": args.gpu,
         "consecutive_stagnations": 0,
+        "current_parent_id": None,
     }
     save_state(state)
     save_population([])
@@ -151,10 +154,13 @@ def cmd_add_candidate(args):
 def cmd_get_parent(args):
     """Select a parent candidate from the population."""
     pop = load_population()
+    state = load_state()
 
     # Only select from local candidates (swarm candidates don't have train.py on disk)
     local = [c for c in pop if c["source"] == "local"]
     if not local:
+        state["current_parent_id"] = "master"
+        save_state(state)
         print("PARENT: master (no local candidates)")
         print("SOURCE: master")
         return
@@ -171,6 +177,10 @@ def cmd_get_parent(args):
         parent = random.choice(local)
     else:
         parent = min(local, key=lambda c: c["val_bpb"])
+
+    # Persist parent selection so hooks can validate against it
+    state["current_parent_id"] = parent["id"]
+    save_state(state)
 
     print(f"PARENT: {parent['id']}")
     print(f"VAL_BPB: {parent['val_bpb']:.6f}")
@@ -234,6 +244,8 @@ def cmd_start_window(args):
     state = load_state()
     pop = load_population()
 
+    # Increment total window count (tracks completed windows across session)
+    state["window_count"] = state.get("window_count", 0) + 1
     state["window_iteration"] = 0
     state["phase"] = "solution_evolution"
 
@@ -520,6 +532,20 @@ def cmd_set(args):
     print(f"Set {args.key} = {val}")
 
 
+# ── get ───────────────────────────────────────────────────────────────────────
+
+def cmd_get(args):
+    """Read a single key from state.json."""
+    state = load_state()
+    key = args.key
+    if key not in state:
+        print(f"ERROR: Key '{key}' not found in state.json", file=sys.stderr)
+        print(f"Available keys: {', '.join(sorted(state.keys()))}", file=sys.stderr)
+        sys.exit(1)
+    val = state[key]
+    print(f"{key}: {val}")
+
+
 # ── show ──────────────────────────────────────────────────────────────────────
 
 def cmd_show(args):
@@ -532,7 +558,7 @@ def cmd_show(args):
     print(f"Session: {state.get('session_id', 'unknown')}")
     print(f"Phase: {state.get('phase', 'unknown')}")
     print(f"Strategy: {state.get('current_strategy_id', 'unknown')}")
-    print(f"Window: {state.get('window_iteration', 0)}/{state.get('window_size', 6)}")
+    print(f"Window: {state.get('window_iteration', 0)}/{state.get('window_size', 6)} (window #{state.get('window_count', 0)})")
     print(f"Total evaluations: {state.get('total_evaluations', 0)}")
     print(f"Master: hash={state.get('master_hash', 'unknown')}, val_bpb={state.get('master_val_bpb', 'unknown')}")
     print(f"GPU: {state.get('gpu_index', 0)}")
@@ -617,6 +643,10 @@ def main():
     # get-best-strategy
     sub.add_parser("get-best-strategy")
 
+    # get
+    p = sub.add_parser("get")
+    p.add_argument("--key", type=str, required=True)
+
     # set
     p = sub.add_parser("set")
     p.add_argument("--key", type=str, required=True)
@@ -640,6 +670,7 @@ def main():
         "record-strategy": cmd_record_strategy,
         "score-strategy": cmd_score_strategy,
         "get-best-strategy": cmd_get_best_strategy,
+        "get": cmd_get,
         "set": cmd_set,
         "show": cmd_show,
     }

@@ -33,7 +33,7 @@ def main():
 
     if not state:
         print("=== NO EVOX SESSION FOUND ===")
-        print("Run 'python evox/state_manager.py init' to start a new session.")
+        print("Run 'uv run evox/state_manager.py init' to start a new session.")
         return
 
     print("=== RESUMING EVOX SESSION ===")
@@ -123,13 +123,13 @@ def main():
     if phase == "solution_evolution":
         if window_iter >= window_size:
             print("Window complete. Proceed to Phase II (Progress Monitoring).")
-            print("Run: python evox/state_manager.py check-stagnation")
+            print("Run: uv run evox/state_manager.py check-stagnation")
         else:
             print(f"Continue Phase I (Solution Evolution), iteration {window_iter + 1} of {window_size}.")
             print("Steps: check master -> select parent -> choose operator -> generate candidate -> evaluate -> record")
     elif phase == "progress_monitoring":
         print("Run Phase II: check stagnation and score strategy.")
-        print("Run: python evox/state_manager.py check-stagnation")
+        print("Run: uv run evox/state_manager.py check-stagnation")
     elif phase == "strategy_evolution":
         print("Run Phase III: evolve the search strategy.")
         print("Read population_summary.py output and strategy history, then write new current_strategy.md.")

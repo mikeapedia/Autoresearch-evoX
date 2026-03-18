@@ -21,7 +21,7 @@ git add evox/strategies/ 2>/dev/null || true
 
 4. Create a descriptive checkpoint commit:
 ```bash
-git commit -m "evox: manual checkpoint - $(uv run evox/state_manager.py get window_count) windows, $(uv run python -c "import json; p=json.load(open('evox/population.json')); print(len(p))" 2>/dev/null || echo '?') candidates"
+git commit -m "evox: manual checkpoint - window #$(uv run evox/state_manager.py get --key window_count 2>/dev/null | grep -o '[0-9]*' || echo '?'), $(uv run python -c "import json; p=json.load(open('evox/population.json')); print(len(p))" 2>/dev/null || echo '?') candidates"
 ```
 
 5. Report what was committed:
