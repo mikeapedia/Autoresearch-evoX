@@ -355,7 +355,7 @@ def cmd_check_stagnation(args):
     print(f"CURRENT_BEST_BPB: {current_best_bpb:.6f}")
     print(f"LOCAL_BEST_BPB: {local_best_bpb:.6f}")
     print(f"DELTA: {delta:.6f} (overall, positive = improvement)")
-    print(f"LOCAL_DELTA: {local_delta:.6f} (local candidates only)")
+    print(f"LOCAL_DELTA: {local_delta:.6f} (this GPU's candidates only)")
     print(f"TAU: {tau:.6f}")
     print(f"STRATEGY_SCORE_J: {J:.6f}")
     print(f"STAGNATING: {stagnating} (based on local delta)")

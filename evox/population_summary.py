@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compute population state descriptor phi(D_t) for EvoX strategy evolution.
 
-Reads population.json, strategies.json, and state.json, then outputs a
+Reads population.json, strategies.json, and state_gpu{N}.json, then outputs a
 human-readable report that Claude uses to understand the current state
 of the evolutionary search.
 

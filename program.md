@@ -111,7 +111,7 @@ mkdir -p ~/autolab-contributor/candidates
 Check:
 
 ```bash
-ls ~/autolab-contributor/evox/state_manager.py ~/autolab-contributor/evox/population_summary.py ~/autolab-contributor/evox/strategy_validator.py ~/autolab-contributor/evox/resume.py
+ls ~/autolab-contributor/evox/state_manager.py ~/autolab-contributor/evox/population_summary.py ~/autolab-contributor/evox/strategy_validator.py ~/autolab-contributor/evox/resume.py ~/autolab-contributor/evox/filelock.py ~/autolab-contributor/evox/gpu.py
 ```
 
 If any are missing, tell the user: "The EvoX helper scripts are not deployed. Please copy the evox/ directory from the source repository to ~/autolab-contributor/evox/ before continuing." Then stop.
