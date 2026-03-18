@@ -62,7 +62,23 @@ def main() -> None:
             with open(state_path) as f:
                 state = json.load(f)
             parent_id = state.get("current_parent_id", "")
-            if parent_id and parent_id != "master":
+            if parent_id == "master":
+                # Compare against train_orig.py (the master snapshot)
+                train_orig = os.path.join(root, "train_orig.py")
+                if os.path.isfile(train_orig):
+                    with open(train_py) as f:
+                        current_content = f.read()
+                    with open(train_orig) as f:
+                        orig_content = f.read()
+                    if current_content == orig_content:
+                        print(
+                            "BLOCKED: train.py is identical to train_orig.py (master).\n"
+                            "You must make changes before running evaluation.\n"
+                            "Apply the selected operator to modify train.py first.",
+                            file=sys.stderr,
+                        )
+                        sys.exit(2)
+            elif parent_id:
                 parent_train = os.path.join(
                     root, "candidates", parent_id, "train.py"
                 )

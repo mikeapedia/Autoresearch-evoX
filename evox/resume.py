@@ -5,7 +5,7 @@ Reads all state files and outputs a structured summary that tells Claude
 exactly where to continue from.
 
 Usage:
-    python evox/resume.py
+    uv run evox/resume.py
 """
 
 import json

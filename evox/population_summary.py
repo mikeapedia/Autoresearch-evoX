@@ -6,7 +6,7 @@ human-readable report that Claude uses to understand the current state
 of the evolutionary search.
 
 Usage:
-    python evox/population_summary.py
+    uv run evox/population_summary.py
 """
 
 import json

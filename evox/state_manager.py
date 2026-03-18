@@ -6,21 +6,21 @@ and strategy history (strategies.json). Provides CLI subcommands for all
 state mutations so Claude Code doesn't need to manipulate JSON directly.
 
 Usage:
-    python evox/state_manager.py init --gpu 0 --tau 0.001 --window-size 6
-    python evox/state_manager.py add-candidate --val-bpb 1.02 --parent cand_001 --operator REFINE --hypothesis "..." [--master-hash abc] [--strategy-id S_000] [--submitted]
-    python evox/state_manager.py get-parent --method best|tournament|random
-    python evox/state_manager.py get-inspiration --count 3
-    python evox/state_manager.py select-operator --weights 40,40,20
-    python evox/state_manager.py start-window
-    python evox/state_manager.py advance-window
-    python evox/state_manager.py check-stagnation
-    python evox/state_manager.py import-swarm --id <id> --val-bpb <val> --message "..." --master-hash <hash>
-    python evox/state_manager.py record-strategy --id S_001 --parent-id S_000 --description "..."
-    python evox/state_manager.py score-strategy
-    python evox/state_manager.py get-best-strategy
-    python evox/state_manager.py get --key <key>
-    python evox/state_manager.py set --key <key> --value <value>
-    python evox/state_manager.py show
+    uv run evox/state_manager.py init --gpu 0 --tau 0.001 --window-size 6
+    uv run evox/state_manager.py add-candidate --val-bpb 1.02 --parent cand_001 --operator REFINE --hypothesis "..." [--master-hash abc] [--strategy-id S_000] [--submitted]
+    uv run evox/state_manager.py get-parent --method best|tournament|random
+    uv run evox/state_manager.py get-inspiration --count 3
+    uv run evox/state_manager.py select-operator --weights 40,40,20
+    uv run evox/state_manager.py start-window
+    uv run evox/state_manager.py advance-window
+    uv run evox/state_manager.py check-stagnation
+    uv run evox/state_manager.py import-swarm --id <id> --val-bpb <val> --message "..." --master-hash <hash>
+    uv run evox/state_manager.py record-strategy --id S_001 --parent-id S_000 --description "..."
+    uv run evox/state_manager.py score-strategy
+    uv run evox/state_manager.py get-best-strategy
+    uv run evox/state_manager.py get --key <key>
+    uv run evox/state_manager.py set --key <key> --value <value>
+    uv run evox/state_manager.py show
 """
 
 import argparse

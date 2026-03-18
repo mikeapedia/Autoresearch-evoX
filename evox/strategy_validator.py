@@ -4,7 +4,7 @@
 Returns exit code 0 if valid, 1 if not. Prints diagnostics.
 
 Usage:
-    python evox/strategy_validator.py [path/to/strategy.md]
+    uv run evox/strategy_validator.py [path/to/strategy.md]
 """
 
 import re

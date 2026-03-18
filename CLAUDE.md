@@ -21,7 +21,7 @@ No test suite — the scripts are validated by running subcommands with mock dat
 
 **`evox/` scripts** — Four Python CLI tools that manage all persistent state so Claude doesn't manipulate JSON directly:
 
-- **`state_manager.py`** (14 subcommands) — The core state machine. Manages `state.json` (session/window/phase tracking), `population.json` (all evaluated candidates), and `strategies.json` (strategy history with J scores). Key subcommands: `add-candidate`, `check-stagnation`, `score-strategy`, `get-best-strategy`, `record-strategy`.
+- **`state_manager.py`** (15 subcommands) — The core state machine. Manages `state.json` (session/window/phase tracking), `population.json` (all evaluated candidates), and `strategies.json` (strategy history with J scores). Key subcommands: `add-candidate`, `check-stagnation`, `score-strategy`, `get-best-strategy`, `get`, `record-strategy`.
 - **`population_summary.py`** — Computes φ(D_t), the population state descriptor. Outputs score statistics, per-operator performance, convergence analysis, and regressions. Claude reads this output to make strategy evolution decisions in Phase III.
 - **`strategy_validator.py`** — Validates that `current_strategy.md` has 6 required sections and parseable operator weights summing to 100%.
 - **`resume.py`** — Session restart handler. Cross-references `candidates/` dirs against `population.json` to detect incomplete evaluations.
