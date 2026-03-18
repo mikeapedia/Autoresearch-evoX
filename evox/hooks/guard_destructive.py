@@ -20,10 +20,10 @@ DESTRUCTIVE_PATTERNS = [
     (re.compile(r"\bgit\s+push\s+.*--force\b"), "git push --force"),
     (re.compile(r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*\s+.*candidates/"), "rm -r candidates/"),
     (re.compile(r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*\s+.*evox/"), "rm -r evox/"),
-    (re.compile(r"\brm\s+.*state\.json\b"), "rm state.json"),
+    (re.compile(r"\brm\s+.*state(_gpu\d+)?\.json\b"), "rm state*.json"),
     (re.compile(r"\brm\s+.*population\.json\b"), "rm population.json"),
     (re.compile(r"\brm\s+.*strategies\.json\b"), "rm strategies.json"),
-    (re.compile(r"\brm\s+.*current_strategy\.md\b"), "rm current_strategy.md"),
+    (re.compile(r"\brm\s+.*current_strategy(_gpu\d+)?\.md\b"), "rm current_strategy*.md"),
 ]
 
 

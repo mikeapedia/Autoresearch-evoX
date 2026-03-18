@@ -71,6 +71,14 @@ Source the file.
 
 Run nvidia-smi to see available GPUs. If there is only one GPU, use GPU=0. If there are multiple GPUs, ask the user which GPU index to use — show them the nvidia-smi output so they can pick a free one. For multi-GPU setups, the user can run multiple Claude Code instances — each uses a different GPU, and they all share the same \~/.autolab/credentials.
 
+Set the EvoX GPU environment variable for this session:
+
+```bash
+export EVOX_GPU=$GPU
+```
+
+All EvoX scripts use this variable to find their per-GPU state files. Each Claude Code instance must set this before running any EvoX commands.
+
 ### 5\. Set up workspace
 
 ```bash
@@ -97,6 +105,8 @@ mkdir -p ~/autolab-contributor/candidates
 * `population_summary.py` — computes population state descriptor for strategy evolution
 * `strategy_validator.py` — validates strategy document structure
 * `resume.py` — session restart context printer
+* `filelock.py` — file locking for concurrent multi-GPU access
+* `gpu.py` — GPU index resolution from EVOX\_GPU environment variable
 
 Check:
 
@@ -113,10 +123,10 @@ cd ~/autolab-contributor
 uv run evox/state_manager.py init --gpu $GPU --tau 0.001 --window-size 6
 ```
 
-Write the initial strategy document to `evox/current_strategy.md`:
+Write the initial strategy document to `evox/current_strategy_gpu${EVOX_GPU}.md`:
 
 ```markdown
-# Strategy S_000: Initial Exploration
+# Strategy S_g${EVOX_GPU}_000: Initial Exploration
 
 ## Parent Selection Rule
 Select the candidate with the best val_bpb as parent.
@@ -149,7 +159,7 @@ Combine multiple ideas if you have a strong hypothesis.
 Record the initial strategy:
 
 ```bash
-uv run evox/state_manager.py record-strategy --id S_000 --description "Initial exploration: balanced 40/40/20 operator weights, best-first parent selection"
+uv run evox/state_manager.py record-strategy --id S_g${EVOX_GPU}_000 --description "Initial exploration: balanced 40/40/20 operator weights, best-first parent selection"
 ```
 
 ### 7\. Study the research so far
@@ -312,7 +322,7 @@ Now apply the selected operator to the parent:
 Save the candidate:
 
 ```bash
-CAND_ID="cand_$(printf '%04d' $(uv run python -c "import json; print(json.load(open('evox/state.json')).get('total_evaluations', 0))"))"
+CAND_ID="cand_g${EVOX_GPU}_$(printf '%04d' $(uv run python -c "import json; print(json.load(open('evox/state_gpu${EVOX_GPU}.json')).get('total_evaluations', 0))"))"
 mkdir -p candidates/$CAND_ID
 cp train.py candidates/$CAND_ID/train.py
 ```
@@ -470,7 +480,7 @@ From strategies.json, pick the strategy with the highest J\_score as the parent 
 
 #### Step 3.4: Write the new strategy
 
-Create a new strategy ID (S\_001, S\_002, etc.) and write a new `evox/current_strategy.md`. The new strategy must:
+Create a new strategy ID using your GPU prefix (S\_g0\_001, S\_g0\_002, etc.) and write a new `evox/current_strategy_gpu${EVOX_GPU}.md`. The new strategy must:
 
 1. Have all required sections (Parent Selection Rule, Inspiration Set Construction, Variation Operator Preferences, REFINE Guidance, DIVERGE Guidance, FREE Guidance)
 2. Differ meaningfully from the parent — change at least one of: operator weights, selection method, or guidance content
@@ -501,12 +511,35 @@ Go back to **Phase I** with the new strategy.
 
 ---
 
+## Multi-GPU operation
+
+When running on multiple GPUs, each GPU runs its own Claude Code instance with an independent EvoX loop. The architecture is **independent workers with a shared population**:
+
+**Per-GPU (no contention):**
+* `evox/state_gpu{N}.json` — each GPU's own phase, counters, window tracking
+* `evox/current_strategy_gpu{N}.md` — each GPU's own strategy document
+* `candidates/cand_g{N}_NNNN/` — GPU-namespaced candidate directories
+* Strategy IDs: `S_g{N}_NNN` — GPU-namespaced
+
+**Shared (file-locked for safety):**
+* `evox/population.json` — all GPUs' candidates in one database
+* `evox/strategies.json` — all GPUs' strategy history and scores
+
+Each GPU evolves its own strategy independently. GPU-0 might run an aggressive DIVERGE-heavy strategy while GPU-1 runs a conservative REFINE-heavy one. Both benefit from the shared population — a candidate discovered by GPU-0 can be selected as a parent by GPU-1.
+
+**To start a new GPU instance:** Set `export EVOX_GPU=N` (where N is the GPU index), then follow the normal setup or run `uv run evox/resume.py` to continue.
+
+**To migrate from single-GPU:** If you have existing `state.json` and `current_strategy.md` files, run `uv run evox/state_manager.py migrate` to rename them to the multi-GPU naming scheme.
+
+---
+
 ## Session restart
 
 If your session was interrupted, run:
 
 ```bash
 cd ~/autolab-contributor
+export EVOX_GPU=$GPU
 uv run evox/resume.py
 ```
 

@@ -9,14 +9,25 @@ Usage:
 """
 
 import json
+import os
 from pathlib import Path
 
 EVOX_DIR = Path(__file__).parent
-STATE_FILE = EVOX_DIR / "state.json"
 POPULATION_FILE = EVOX_DIR / "population.json"
 STRATEGIES_FILE = EVOX_DIR / "strategies.json"
-STRATEGY_DOC = EVOX_DIR / "current_strategy.md"
 CANDIDATES_DIR = EVOX_DIR.parent / "candidates"
+
+
+def _gpu_index():
+    return os.environ.get("EVOX_GPU", "0")
+
+
+def _state_file():
+    return EVOX_DIR / f"state_gpu{_gpu_index()}.json"
+
+
+def _strategy_doc():
+    return EVOX_DIR / f"current_strategy_gpu{_gpu_index()}.md"
 
 
 def load_json(path, default=None):
@@ -27,7 +38,10 @@ def load_json(path, default=None):
 
 
 def main():
-    state = load_json(STATE_FILE, {})
+    state_file = _state_file()
+    strategy_doc = _strategy_doc()
+
+    state = load_json(state_file, {})
     pop = load_json(POPULATION_FILE, [])
     strats = load_json(STRATEGIES_FILE, [])
 
@@ -36,7 +50,7 @@ def main():
         print("Run 'uv run evox/state_manager.py init' to start a new session.")
         return
 
-    print("=== RESUMING EVOX SESSION ===")
+    print(f"=== RESUMING EVOX SESSION (GPU {_gpu_index()}, {state_file.name}) ===")
     print(f"Session ID: {state.get('session_id', 'unknown')}")
     print(f"Total evaluations: {state.get('total_evaluations', 0)}")
     print(f"GPU: {state.get('gpu_index', 0)}")
@@ -81,16 +95,16 @@ def main():
 
     # Current strategy
     print("=== Current Strategy ===")
-    if STRATEGY_DOC.exists():
-        content = STRATEGY_DOC.read_text(encoding="utf-8")
+    if strategy_doc.exists():
+        content = strategy_doc.read_text(encoding="utf-8")
         # Print first 20 lines
         lines = content.strip().split("\n")
         for line in lines[:20]:
             print(f"  {line}")
         if len(lines) > 20:
-            print(f"  ... ({len(lines) - 20} more lines, see evox/current_strategy.md)")
+            print(f"  ... ({len(lines) - 20} more lines, see {strategy_doc.name})")
     else:
-        print("No strategy document found. Create evox/current_strategy.md.")
+        print(f"No strategy document found. Create {strategy_doc.name}.")
     print()
 
     # Strategy history
@@ -132,9 +146,9 @@ def main():
         print("Run: uv run evox/state_manager.py check-stagnation")
     elif phase == "strategy_evolution":
         print("Run Phase III: evolve the search strategy.")
-        print("Read population_summary.py output and strategy history, then write new current_strategy.md.")
+        print(f"Read population_summary.py output and strategy history, then write new {strategy_doc.name}.")
     else:
-        print(f"Unknown phase: {phase}. Check state.json.")
+        print(f"Unknown phase: {phase}. Check {state_file.name}.")
 
 
 if __name__ == "__main__":

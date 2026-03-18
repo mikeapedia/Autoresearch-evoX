@@ -7,12 +7,17 @@ Usage:
     uv run evox/strategy_validator.py [path/to/strategy.md]
 """
 
+import os
 import re
 import sys
 from pathlib import Path
 
 EVOX_DIR = Path(__file__).parent
-DEFAULT_STRATEGY = EVOX_DIR / "current_strategy.md"
+
+
+def _default_strategy():
+    gpu = os.environ.get("EVOX_GPU", "0")
+    return EVOX_DIR / f"current_strategy_gpu{gpu}.md"
 
 REQUIRED_SECTIONS = [
     "Parent Selection Rule",
@@ -68,7 +73,7 @@ def validate(path):
 
 
 def main():
-    path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_STRATEGY
+    path = Path(sys.argv[1]) if len(sys.argv) > 1 else _default_strategy()
     valid = validate(path)
     sys.exit(0 if valid else 1)
 

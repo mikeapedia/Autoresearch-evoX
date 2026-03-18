@@ -10,13 +10,18 @@ Usage:
 """
 
 import json
+import os
 import statistics
 from pathlib import Path
 
 EVOX_DIR = Path(__file__).parent
-STATE_FILE = EVOX_DIR / "state.json"
 POPULATION_FILE = EVOX_DIR / "population.json"
 STRATEGIES_FILE = EVOX_DIR / "strategies.json"
+
+
+def _state_file():
+    gpu = os.environ.get("EVOX_GPU", "0")
+    return EVOX_DIR / f"state_gpu{gpu}.json"
 
 
 def load_json(path, default=None):
@@ -27,7 +32,7 @@ def load_json(path, default=None):
 
 
 def main():
-    state = load_json(STATE_FILE, {})
+    state = load_json(_state_file(), {})
     pop = load_json(POPULATION_FILE, [])
     strats = load_json(STRATEGIES_FILE, [])
 

@@ -8,6 +8,7 @@ Exit codes: always 0 (never block session end).
 Stdin: JSON with stop reason from Claude Code.
 """
 
+import glob as glob_mod
 import json
 import os
 import subprocess
@@ -20,12 +21,10 @@ def find_project_root() -> str:
     hook_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.dirname(os.path.dirname(hook_dir))
 
-
-STATE_FILES = [
-    "evox/state.json",
+# Shared files that always get staged
+SHARED_FILES = [
     "evox/population.json",
     "evox/strategies.json",
-    "evox/current_strategy.md",
 ]
 
 
@@ -48,12 +47,21 @@ def main() -> None:
     if git_check.returncode != 0:
         sys.exit(0)  # Not a git repo — skip
 
-    # Stage only existing state files that have changes
+    # Stage shared files
     files_to_stage = []
-    for rel_path in STATE_FILES:
+    for rel_path in SHARED_FILES:
         full_path = os.path.join(root, rel_path)
         if os.path.isfile(full_path):
             files_to_stage.append(rel_path)
+
+    # Dynamically discover all per-GPU state files (state_gpu*.json)
+    evox_dir = os.path.join(root, "evox")
+    for f in glob_mod.glob(os.path.join(evox_dir, "state_gpu*.json")):
+        files_to_stage.append(os.path.join("evox", os.path.basename(f)))
+
+    # Dynamically discover all per-GPU strategy files (current_strategy_gpu*.md)
+    for f in glob_mod.glob(os.path.join(evox_dir, "current_strategy_gpu*.md")):
+        files_to_stage.append(os.path.join("evox", os.path.basename(f)))
 
     # Also stage any new candidate directories
     candidates_dir = os.path.join(root, "candidates")

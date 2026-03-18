@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""EvoX state manager for autolab.
+"""EvoX state manager for autolab (multi-GPU).
 
-Manages the solution database (population.json), session state (state.json),
-and strategy history (strategies.json). Provides CLI subcommands for all
-state mutations so Claude Code doesn't need to manipulate JSON directly.
+Manages the solution database (population.json), per-GPU session state
+(state_gpu{N}.json), and strategy history (strategies.json). Provides CLI
+subcommands for all state mutations so Claude Code doesn't need to
+manipulate JSON directly.
+
+Multi-GPU: Each GPU gets its own state file and strategy document.
+The population and strategy history are shared across GPUs with file
+locking to prevent corruption from concurrent access. The GPU index
+is read from the EVOX_GPU environment variable (default "0").
 
 Usage:
     uv run evox/state_manager.py init --gpu 0 --tau 0.001 --window-size 6
-    uv run evox/state_manager.py add-candidate --val-bpb 1.02 --parent cand_001 --operator REFINE --hypothesis "..." [--master-hash abc] [--strategy-id S_000] [--submitted]
+    uv run evox/state_manager.py add-candidate --val-bpb 1.02 --parent cand_g0_001 --operator REFINE --hypothesis "..." [--master-hash abc] [--strategy-id S_g0_000] [--submitted]
     uv run evox/state_manager.py get-parent --method best|tournament|random
     uv run evox/state_manager.py get-inspiration --count 3
     uv run evox/state_manager.py select-operator --weights 40,40,20
@@ -15,12 +21,13 @@ Usage:
     uv run evox/state_manager.py advance-window
     uv run evox/state_manager.py check-stagnation
     uv run evox/state_manager.py import-swarm --id <id> --val-bpb <val> --message "..." --master-hash <hash>
-    uv run evox/state_manager.py record-strategy --id S_001 --parent-id S_000 --description "..."
+    uv run evox/state_manager.py record-strategy --id S_g0_001 --parent-id S_g0_000 --description "..."
     uv run evox/state_manager.py score-strategy
     uv run evox/state_manager.py get-best-strategy
     uv run evox/state_manager.py get --key <key>
     uv run evox/state_manager.py set --key <key> --value <value>
     uv run evox/state_manager.py show
+    uv run evox/state_manager.py migrate
 """
 
 import argparse
@@ -32,12 +39,24 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from filelock import locked_json
+from gpu import get_gpu_index, gpu_prefix
+
 EVOX_DIR = Path(__file__).parent
-STATE_FILE = EVOX_DIR / "state.json"
-POPULATION_FILE = EVOX_DIR / "population.json"
-STRATEGIES_FILE = EVOX_DIR / "strategies.json"
+POPULATION_FILE = EVOX_DIR / "population.json"       # SHARED across GPUs
+STRATEGIES_FILE = EVOX_DIR / "strategies.json"        # SHARED across GPUs
 CANDIDATES_DIR = EVOX_DIR.parent / "candidates"
 STRATEGIES_DIR = EVOX_DIR / "strategies"
+
+
+def _state_file():
+    """Per-GPU state file: state_gpu0.json, state_gpu1.json, etc."""
+    return EVOX_DIR / f"state_gpu{get_gpu_index()}.json"
+
+
+def _strategy_doc():
+    """Per-GPU strategy document: current_strategy_gpu0.md, etc."""
+    return EVOX_DIR / f"current_strategy_gpu{get_gpu_index()}.md"
 
 
 def load_json(path, default=None):
@@ -53,27 +72,21 @@ def save_json(path, data):
 
 
 def load_state():
-    return load_json(STATE_FILE, {})
+    return load_json(_state_file(), {})
 
 
 def save_state(state):
-    save_json(STATE_FILE, state)
+    save_json(_state_file(), state)
 
 
 def load_population():
+    """Read-only snapshot of shared population. For writes, use locked_json."""
     return load_json(POPULATION_FILE, [])
 
 
-def save_population(pop):
-    save_json(POPULATION_FILE, pop)
-
-
 def load_strategies():
+    """Read-only snapshot of shared strategies. For writes, use locked_json."""
     return load_json(STRATEGIES_FILE, [])
-
-
-def save_strategies(strats):
-    save_json(STRATEGIES_FILE, strats)
 
 
 # ── init ──────────────────────────────────────────────────────────────────────
@@ -84,10 +97,11 @@ def cmd_init(args):
     EVOX_DIR.mkdir(parents=True, exist_ok=True)
     STRATEGIES_DIR.mkdir(parents=True, exist_ok=True)
 
+    gp = gpu_prefix()
     state = {
         "session_id": str(uuid.uuid4())[:8],
         "phase": "solution_evolution",
-        "current_strategy_id": "S_000",
+        "current_strategy_id": f"S_{gp}_000",
         "window_iteration": 0,
         "window_size": args.window_size,
         "window_start_best_bpb": None,
@@ -102,19 +116,26 @@ def cmd_init(args):
         "current_parent_id": None,
     }
     save_state(state)
-    save_population([])
-    save_strategies([])
+
+    # Shared files: only create if they don't exist (another GPU may have init'd first)
+    if not POPULATION_FILE.exists():
+        save_json(POPULATION_FILE, [])
+    if not STRATEGIES_FILE.exists():
+        save_json(STRATEGIES_FILE, [])
+
     print(f"Initialized EvoX state (session={state['session_id']}, W={args.window_size}, tau={args.tau}, GPU={args.gpu})")
+    print(f"  State file: {_state_file().name}")
+    print(f"  Strategy doc: {_strategy_doc().name}")
 
 
 # ── add-candidate ─────────────────────────────────────────────────────────────
 
 def cmd_add_candidate(args):
     """Record an evaluated candidate in the population."""
-    pop = load_population()
     state = load_state()
 
-    cand_id = f"cand_{state['total_evaluations']:04d}"
+    gp = gpu_prefix()
+    cand_id = f"cand_{gp}_{state['total_evaluations']:04d}"
     cand_dir = CANDIDATES_DIR / cand_id
     cand_dir.mkdir(parents=True, exist_ok=True)
 
@@ -129,15 +150,16 @@ def cmd_add_candidate(args):
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "strategy_id": args.strategy_id or state.get("current_strategy_id"),
         "submitted": args.submitted,
+        "gpu_index": get_gpu_index(),
     }
 
-    # Compute best BEFORE appending so the marker is meaningful
-    prev_local = [c for c in pop if c["source"] == "local"]
-    prev_best_bpb = min((c["val_bpb"] for c in prev_local), default=float("inf"))
+    # Atomic append to shared population under file lock
+    with locked_json(POPULATION_FILE, []) as pop:
+        prev_local = [c for c in pop if c["source"] == "local"]
+        prev_best_bpb = min((c["val_bpb"] for c in prev_local), default=float("inf"))
+        pop.append(candidate)
 
-    pop.append(candidate)
-    save_population(pop)
-
+    # Update per-GPU state (no lock needed — single writer)
     state["total_evaluations"] += 1
     state["window_iteration"] += 1
     save_state(state)
@@ -279,7 +301,7 @@ def cmd_advance_window(args):
 # ── check-stagnation ──────────────────────────────────────────────────────────
 
 def cmd_check_stagnation(args):
-    """Compute window improvement and check stagnation against τ."""
+    """Compute window improvement and check stagnation against tau."""
     state = load_state()
     pop = load_population()
 
@@ -350,28 +372,26 @@ def cmd_check_stagnation(args):
 
 def cmd_import_swarm(args):
     """Import a swarm experiment as an immigrant candidate."""
-    pop = load_population()
+    # Atomic duplicate-check + append under file lock
+    with locked_json(POPULATION_FILE, []) as pop:
+        if any(c["id"] == f"swarm_{args.id}" for c in pop):
+            print(f"Swarm candidate {args.id} already imported, skipping.")
+            return
 
-    # Check for duplicate
-    if any(c["id"] == f"swarm_{args.id}" for c in pop):
-        print(f"Swarm candidate {args.id} already imported, skipping.")
-        return
+        candidate = {
+            "id": f"swarm_{args.id}",
+            "parent_id": "swarm",
+            "source": "swarm",
+            "operator": "SWARM",
+            "hypothesis": args.message,
+            "val_bpb": args.val_bpb,
+            "master_hash_at_eval": args.master_hash,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "strategy_id": "external",
+            "submitted": False,
+        }
+        pop.append(candidate)
 
-    candidate = {
-        "id": f"swarm_{args.id}",
-        "parent_id": "swarm",
-        "source": "swarm",
-        "operator": "SWARM",
-        "hypothesis": args.message,
-        "val_bpb": args.val_bpb,
-        "master_hash_at_eval": args.master_hash,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "strategy_id": "external",
-        "submitted": False,
-    }
-
-    pop.append(candidate)
-    save_population(pop)
     print(f"Imported swarm candidate swarm_{args.id}: val_bpb={args.val_bpb:.6f}")
 
 
@@ -379,11 +399,10 @@ def cmd_import_swarm(args):
 
 def cmd_record_strategy(args):
     """Record a new strategy in the strategy history and archive the document."""
-    strats = load_strategies()
     state = load_state()
 
     # Archive the current strategy document before switching
-    strategy_doc = EVOX_DIR / "current_strategy.md"
+    strategy_doc = _strategy_doc()
     STRATEGIES_DIR.mkdir(parents=True, exist_ok=True)
     if strategy_doc.exists():
         archive_path = STRATEGIES_DIR / f"{args.id}.md"
@@ -399,10 +418,12 @@ def cmd_record_strategy(args):
         "total_candidates_generated": 0,
         "best_candidate_bpb": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "gpu_index": get_gpu_index(),
     }
 
-    strats.append(entry)
-    save_strategies(strats)
+    # Atomic append to shared strategies under file lock
+    with locked_json(STRATEGIES_FILE, []) as strats:
+        strats.append(entry)
 
     state["current_strategy_id"] = args.id
     # NOTE: Do NOT reset consecutive_stagnations here. The counter tracks
@@ -418,51 +439,53 @@ def cmd_record_strategy(args):
 
 def cmd_score_strategy(args):
     """Update the current strategy's performance score after a window."""
-    strats = load_strategies()
     state = load_state()
-    pop = load_population()
-
     strategy_id = state.get("current_strategy_id")
-    entry = next((s for s in strats if s["strategy_id"] == strategy_id), None)
 
-    if not entry:
-        print(f"WARNING: Strategy {strategy_id} not found in history. Creating entry.")
-        entry = {
-            "strategy_id": strategy_id,
-            "parent_strategy_id": None,
-            "description": "Initial strategy",
-            "J_score": 0.0,
-            "windows_active": 0,
-            "total_candidates_generated": 0,
-            "best_candidate_bpb": None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        strats.append(entry)
+    # Atomic read-update on shared strategies under file lock
+    with locked_json(STRATEGIES_FILE, []) as strats:
+        pop = load_population()  # read-only snapshot
 
-    # Count candidates generated under this strategy
-    strat_candidates = [c for c in pop if c.get("strategy_id") == strategy_id and c["source"] == "local"]
-    entry["total_candidates_generated"] = len(strat_candidates)
-    windows_active = int(entry.get("windows_active") or 0) + 1
-    entry["windows_active"] = windows_active
+        entry = next((s for s in strats if s["strategy_id"] == strategy_id), None)
 
-    if strat_candidates:
-        entry["best_candidate_bpb"] = min(c["val_bpb"] for c in strat_candidates)
+        if not entry:
+            print(f"WARNING: Strategy {strategy_id} not found in history. Creating entry.")
+            entry = {
+                "strategy_id": strategy_id,
+                "parent_strategy_id": None,
+                "description": "Initial strategy",
+                "J_score": 0.0,
+                "windows_active": 0,
+                "total_candidates_generated": 0,
+                "best_candidate_bpb": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "gpu_index": get_gpu_index(),
+            }
+            strats.append(entry)
 
-    # Compute J score
-    start_bpb = state.get("window_start_best_bpb")
-    if start_bpb and pop:
-        current_best = min(c["val_bpb"] for c in pop)
-        delta = start_bpb - current_best
-        W = state.get("window_size", 6)
-        J = delta * math.log(1 + 1 / start_bpb) / math.sqrt(W) if start_bpb > 0 else 0.0
+        # Count candidates generated under this strategy
+        strat_candidates = [c for c in pop if c.get("strategy_id") == strategy_id and c["source"] == "local"]
+        entry["total_candidates_generated"] = len(strat_candidates)
+        windows_active = int(entry.get("windows_active") or 0) + 1
+        entry["windows_active"] = windows_active
 
-        # Running average of J across windows
-        if entry["J_score"] is not None:
-            entry["J_score"] = (float(entry["J_score"]) * (windows_active - 1) + J) / windows_active
-        else:
-            entry["J_score"] = J
+        if strat_candidates:
+            entry["best_candidate_bpb"] = min(c["val_bpb"] for c in strat_candidates)
 
-    save_strategies(strats)
+        # Compute J score
+        start_bpb = state.get("window_start_best_bpb")
+        if start_bpb and pop:
+            current_best = min(c["val_bpb"] for c in pop)
+            delta = start_bpb - current_best
+            W = state.get("window_size", 6)
+            J = delta * math.log(1 + 1 / start_bpb) / math.sqrt(W) if start_bpb > 0 else 0.0
+
+            # Running average of J across windows
+            if entry["J_score"] is not None:
+                entry["J_score"] = (float(entry["J_score"]) * (windows_active - 1) + J) / windows_active
+            else:
+                entry["J_score"] = J
+
     print(f"Strategy {strategy_id}: J={entry['J_score']:.6f}, windows={entry['windows_active']}, candidates={entry['total_candidates_generated']}")
     if entry["best_candidate_bpb"] is not None:
         print(f"  Best candidate val_bpb: {entry['best_candidate_bpb']:.6f}")
@@ -488,13 +511,13 @@ def cmd_get_best_strategy(args):
     print(f"DESCRIPTION: {best.get('description', 'N/A')}")
 
     if archive_path.exists():
-        # Restore the strategy document
-        strategy_doc = EVOX_DIR / "current_strategy.md"
+        # Restore the strategy document to this GPU's strategy file
+        strategy_doc = _strategy_doc()
         strategy_doc.write_text(archive_path.read_text(encoding="utf-8"), encoding="utf-8")
         state["current_strategy_id"] = best["strategy_id"]
         state["consecutive_stagnations"] = 0
         save_state(state)
-        print(f"RESTORED: {archive_path} -> current_strategy.md")
+        print(f"RESTORED: {archive_path} -> {strategy_doc.name}")
         print(f"Active strategy reverted to: {best['strategy_id']}")
     else:
         print(f"WARNING: Archive not found at {archive_path}")
@@ -535,11 +558,11 @@ def cmd_set(args):
 # ── get ───────────────────────────────────────────────────────────────────────
 
 def cmd_get(args):
-    """Read a single key from state.json."""
+    """Read a single key from per-GPU state."""
     state = load_state()
     key = args.key
     if key not in state:
-        print(f"ERROR: Key '{key}' not found in state.json", file=sys.stderr)
+        print(f"ERROR: Key '{key}' not found in {_state_file().name}", file=sys.stderr)
         print(f"Available keys: {', '.join(sorted(state.keys()))}", file=sys.stderr)
         sys.exit(1)
     val = state[key]
@@ -554,7 +577,7 @@ def cmd_show(args):
     pop = load_population()
     strats = load_strategies()
 
-    print("=== EvoX State ===")
+    print(f"=== EvoX State (GPU {get_gpu_index()}, {_state_file().name}) ===")
     print(f"Session: {state.get('session_id', 'unknown')}")
     print(f"Phase: {state.get('phase', 'unknown')}")
     print(f"Strategy: {state.get('current_strategy_id', 'unknown')}")
@@ -578,13 +601,95 @@ def cmd_show(args):
         print(f"\nStrategies: {len(strats)} in history")
         for s in strats:
             j = f"{s['J_score']:.6f}" if s.get('J_score') is not None else "N/A"
-            print(f"  {s['strategy_id']}: J={j}, windows={s.get('windows_active', 0)}")
+            gpu_tag = f" [GPU {s.get('gpu_index', '?')}]" if s.get("gpu_index") else ""
+            print(f"  {s['strategy_id']}: J={j}, windows={s.get('windows_active', 0)}{gpu_tag}")
+
+
+# ── migrate ──────────────────────────────────────────────────────────────────
+
+def cmd_migrate(args):
+    """Migrate single-GPU state files to multi-GPU naming scheme."""
+    gp = gpu_prefix()
+    migrated = []
+
+    # Migrate state.json -> state_gpuN.json
+    old_state = EVOX_DIR / "state.json"
+    new_state = _state_file()
+    if old_state.exists() and not new_state.exists():
+        old_state.rename(new_state)
+        migrated.append(f"  {old_state.name} -> {new_state.name}")
+
+    # Migrate current_strategy.md -> current_strategy_gpuN.md
+    old_strategy = EVOX_DIR / "current_strategy.md"
+    new_strategy = _strategy_doc()
+    if old_strategy.exists() and not new_strategy.exists():
+        old_strategy.rename(new_strategy)
+        migrated.append(f"  {old_strategy.name} -> {new_strategy.name}")
+
+    # Migrate candidate IDs and directories
+    pop = load_population()
+    renamed_dirs = 0
+    for c in pop:
+        old_id = c["id"]
+        if old_id.startswith("cand_") and not old_id.startswith("cand_g"):
+            num = old_id.removeprefix("cand_")
+            new_id = f"cand_{gp}_{num}"
+            old_dir = CANDIDATES_DIR / old_id
+            new_dir = CANDIDATES_DIR / new_id
+            if old_dir.exists() and not new_dir.exists():
+                old_dir.rename(new_dir)
+                renamed_dirs += 1
+            c["id"] = new_id
+
+    # Update parent_id references
+    for c in pop:
+        parent = c.get("parent_id", "")
+        if parent.startswith("cand_") and not parent.startswith("cand_g"):
+            num = parent.removeprefix("cand_")
+            c["parent_id"] = f"cand_{gp}_{num}"
+
+    if renamed_dirs:
+        migrated.append(f"  {renamed_dirs} candidate directories renamed with {gp} prefix")
+    save_json(POPULATION_FILE, pop)
+
+    # Migrate strategy IDs in strategies.json
+    strats = load_json(STRATEGIES_FILE, [])
+    for s in strats:
+        sid = s["strategy_id"]
+        if sid.startswith("S_") and not sid.startswith("S_g"):
+            num = sid.removeprefix("S_")
+            s["strategy_id"] = f"S_{gp}_{num}"
+        psid = s.get("parent_strategy_id") or ""
+        if psid.startswith("S_") and not psid.startswith("S_g"):
+            num = psid.removeprefix("S_")
+            s["parent_strategy_id"] = f"S_{gp}_{num}"
+        # Also rename strategy archive files
+        old_archive = STRATEGIES_DIR / f"{sid}.md"
+        new_archive = STRATEGIES_DIR / f"{s['strategy_id']}.md"
+        if old_archive.exists() and not new_archive.exists() and sid != s["strategy_id"]:
+            old_archive.rename(new_archive)
+    save_json(STRATEGIES_FILE, strats)
+
+    # Update current_strategy_id in per-GPU state
+    state = load_state()
+    sid = state.get("current_strategy_id", "")
+    if sid.startswith("S_") and not sid.startswith("S_g"):
+        num = sid.removeprefix("S_")
+        state["current_strategy_id"] = f"S_{gp}_{num}"
+        save_state(state)
+
+    if migrated:
+        print("Migration complete:")
+        for m in migrated:
+            print(m)
+    else:
+        print("Nothing to migrate (already using multi-GPU naming or no legacy files found).")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="EvoX state manager for autolab")
+    parser = argparse.ArgumentParser(description="EvoX state manager for autolab (multi-GPU)")
     sub = parser.add_subparsers(dest="command")
 
     # init
@@ -655,6 +760,9 @@ def main():
     # show
     sub.add_parser("show")
 
+    # migrate
+    sub.add_parser("migrate")
+
     args = parser.parse_args()
 
     commands = {
@@ -673,6 +781,7 @@ def main():
         "get": cmd_get,
         "set": cmd_set,
         "show": cmd_show,
+        "migrate": cmd_migrate,
     }
 
     if args.command in commands:

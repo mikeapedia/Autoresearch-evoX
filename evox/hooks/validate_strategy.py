@@ -1,8 +1,8 @@
-"""PostToolUse hook: Auto-validate current_strategy.md after any edit.
+"""PostToolUse hook: Auto-validate strategy documents after any edit.
 
-Runs strategy_validator.py whenever current_strategy.md is written or edited.
-Prints validation errors to stderr so Claude sees them immediately and can fix
-the strategy before continuing the loop.
+Runs strategy_validator.py whenever a current_strategy*.md file is written
+or edited. Matches both legacy (current_strategy.md) and multi-GPU
+(current_strategy_gpu0.md) filenames.
 
 Exit codes: 0 = valid (or not a strategy file), 2 = invalid strategy.
 Stdin: JSON with tool_name and tool_input from Claude Code.
@@ -10,6 +10,7 @@ Stdin: JSON with tool_name and tool_input from Claude Code.
 
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -24,7 +25,7 @@ def main() -> None:
     file_path = tool_input.get("file_path", "")
 
     normalized = file_path.replace("\\", "/")
-    if not normalized.endswith("current_strategy.md"):
+    if not re.search(r"current_strategy(_gpu\d+)?\.md$", normalized):
         sys.exit(0)
 
     # Find the strategy file — could be absolute or relative

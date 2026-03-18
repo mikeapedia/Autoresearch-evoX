@@ -56,7 +56,8 @@ def main() -> None:
         sys.exit(2)
 
     # Try to find the most recent candidate dir to compare against
-    state_path = os.path.join(root, "evox", "state.json")
+    gpu = os.environ.get("EVOX_GPU", "0")
+    state_path = os.path.join(root, "evox", f"state_gpu{gpu}.json")
     if os.path.isfile(state_path):
         try:
             with open(state_path) as f:

@@ -6,7 +6,7 @@ Display a comprehensive EvoX status dashboard by gathering data from all state s
 
 ## Data to gather
 
-1. **Session state** — run:
+1. **Session state** (reads per-GPU state via EVOX_GPU env var) — run:
 ```bash
 uv run evox/state_manager.py get --key phase
 uv run evox/state_manager.py get --key window_count
@@ -15,16 +15,17 @@ uv run evox/state_manager.py get --key current_strategy_id
 uv run evox/state_manager.py get --key consecutive_stagnations
 uv run evox/state_manager.py get --key window_start_best_bpb
 uv run evox/state_manager.py get --key master_val_bpb
+uv run evox/state_manager.py get --key gpu_index
 ```
 
-2. **Population summary** — run:
+2. **Population summary** (shared across all GPUs) — run:
 ```bash
 uv run evox/population_summary.py
 ```
 
 3. **Strategy validation** — run:
 ```bash
-uv run evox/strategy_validator.py evox/current_strategy.md
+uv run evox/strategy_validator.py
 ```
 
 4. **Candidate count and recent activity** — run:
@@ -40,8 +41,9 @@ Present the results as a formatted dashboard:
 ╔══════════════════════════════════════════╗
 ║           EvoX STATUS DASHBOARD          ║
 ╠══════════════════════════════════════════╣
+║ GPU:          [N] (EVOX_GPU)             ║
 ║ Phase:        [current phase]            ║
-║ Window:       #[N] / Strategy: S_[XXX]   ║
+║ Window:       #[N] / Strategy: S_g[N]_XX ║
 ║ Stagnations:  [N] consecutive            ║
 ║ Best val_bpb: [X.XXXX] (master: Y.YYYY)  ║
 ║ Population:   [N] total ([L] local)      ║
