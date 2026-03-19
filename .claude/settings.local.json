@@ -16,7 +16,10 @@
       "Bash(git push:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(grep -r \"lock\\\\|Lock\\\\|LOCK\\\\|atomic\\\\|mutex\\\\|thread\\\\|concurrent\" --include=*.py --include=*.md)",
+      "Bash(find D:/Autoresearch-EvoX -name .claude -o -name settings* -o -name *lock* -type f)",
+      "Bash(candidates\" for multi-GPU accuracy:*)"
     ]
   },
   "hooks": {
